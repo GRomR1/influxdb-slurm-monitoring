@@ -5,6 +5,9 @@
  *  Author: Carlos Fenoy Garcia
  *  Copyright (C) 2016 F. Hoffmann - La Roche
  *
+ *  Author: Ruslan Gainanov
+ *  Copyright (C) 2017 ICMM UB RAS
+ *
  *  Based on the HDF5 profiling plugin and Elasticsearch job completion plugin
  *  
  *  Portions Copyright (C) 2013 Bull S. A. S.
@@ -257,6 +260,8 @@ static int _send_data(const char *data)
 					rc = SLURM_ERROR;
 				} else {
 					debug("Data written");
+					if (debug_flags & DEBUG_FLAG_PROFILE)
+						debug3("PROFILE: Data written (%d)[%s]", (int)strlen(datastr), datastr);
 				}
 				xfree(response);
 			}
@@ -385,9 +390,18 @@ extern int acct_gather_profile_p_node_step_start(stepd_step_rec_t* job)
 	xassert(_run_in_daemon());
 
 	g_job = job;
-	profile_str = acct_gather_profile_to_string(g_job->profile);
-	info("PROFILE: option --profile=%s", profile_str);
-	g_profile_running = _determine_profile();
+	
+	if (debug_flags & DEBUG_FLAG_PROFILE) {
+		profile_str = acct_gather_profile_to_string(g_job->profile);
+		info("PROFILE: option --profile=%s", profile_str);
+	}
+
+	if (g_profile_running == ACCT_GATHER_PROFILE_NOT_SET)
+		g_profile_running = _determine_profile();
+
+	if (g_profile_running <= ACCT_GATHER_PROFILE_NONE)
+		return rc;
+	
 	return rc;
 }
 
@@ -398,42 +412,34 @@ extern int acct_gather_profile_p_child_forked(void)
 
 extern int acct_gather_profile_p_node_step_end(void)
 {
-	int rc = SLURM_SUCCESS;
-
 	xassert(_run_in_daemon());
-
-
-	return rc;
+	return SLURM_SUCCESS;
 }
 
 extern int acct_gather_profile_p_task_start(uint32_t taskid)
-{
-	int rc = SLURM_SUCCESS;
-
-	info("PROFILE: task_start with %d prof",g_profile_running);
+{	
 	xassert(_run_in_daemon());
 	xassert(g_job);
 
 	xassert(g_profile_running != ACCT_GATHER_PROFILE_NOT_SET);
 
 	if (g_profile_running <= ACCT_GATHER_PROFILE_NONE)
-		return rc;
+		return SLURM_SUCCESS;
 
 	if (debug_flags & DEBUG_FLAG_PROFILE)
 		info("PROFILE: task_start");
-
-	return rc;
+	
+	return SLURM_SUCCESS;
 }
 
 extern int acct_gather_profile_p_task_end(pid_t taskpid)
 {
-	if (debug_flags & DEBUG_FLAG_PROFILE)
-		info("PROFILE: task_end");
 	DEF_TIMERS;
 	START_TIMER;
 	_send_data(NULL);
 	END_TIMER;
-	debug("PROFILE: task_end took %s",TIME_STR);
+	if (debug_flags & DEBUG_FLAG_PROFILE)
+		info("PROFILE: task_end took %s",TIME_STR);
 	return SLURM_SUCCESS;
 }
 
@@ -451,8 +457,6 @@ extern int acct_gather_profile_p_create_dataset(
 
 	if (g_profile_running <= ACCT_GATHER_PROFILE_NONE)
 		return SLURM_ERROR;
-
-	debug("acct_gather_profile_p_create_dataset %s", name);
 
 	// compute the size of the type needed to create the table 
 	if (tables_cur_len == tables_max_len) {
@@ -497,31 +501,29 @@ union data_t{
 extern int acct_gather_profile_p_add_sample_data(int table_id, void *data,
 		time_t sample_time)
 {
-
-
-
 	table_t *table = &tables[table_id];
-
+	
 	int i = 0;
 	char *str = NULL;
 	for(;i<table->size;i++){
 		switch (table->types[i]) {
 			case PROFILE_FIELD_UINT64:
 				xstrfmtcat(str,"%s,job=%d,step=%d,task=%s,"
-						"host=%s value=%"PRIu64" "
+						"host=%s,user_name=%s value=%"PRIu64"i "
 						"%"PRIu64"\n",
 						table->names[i],g_job->jobid,
 						g_job->stepid,table->name,
-						g_job->node_name,
+						g_job->node_name,g_job->user_name,
 						((union data_t*)data)[i].u,
 						sample_time);
 				break;
 			case PROFILE_FIELD_DOUBLE:
 				xstrfmtcat(str,"%s,job=%d,step=%d,task=%s,"
-						"host=%s value=%.2f %"PRIu64""
-						"\n",table->names[i], 
-						g_job->jobid,g_job->stepid,
-						table->name,g_job->node_name,
+						"host=%s,user_name=%s value=%.3f "
+					   	"%"PRIu64"\n",
+					   	table->names[i],g_job->jobid,
+					   	g_job->stepid,table->name,
+					   	g_job->node_name,g_job->user_name,
 						((union data_t*)data)[i].d,
 						sample_time);
 				break;
@@ -535,9 +537,6 @@ extern int acct_gather_profile_p_add_sample_data(int table_id, void *data,
 	_send_data(str);
 	END_TIMER;
 	xfree(str);
-	debug("PROFILE: took %s",TIME_STR);
-	debug("PROFILE: data sent");
-
 	return SLURM_SUCCESS;
 }
 
