@@ -1,0 +1,11 @@
+{
+	"name": "SLURM Monitoring",
+	"type": "influxdb",
+	"access": "proxy",
+	"url": "http://localhost:8086",
+	"password": "",
+	"user": "",
+	"database": "docker_slurm",
+	"basicAuth": false,
+	"isDefault": true
+}
