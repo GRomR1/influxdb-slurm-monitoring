@@ -23,6 +23,6 @@ Information is sent to the central server using **libcurl-devel** library, so yo
 
 It is a good idea to have a web layer over your InfluxDB server, such as [Grafana](http://grafana.org/), in order to visualize the data.
 
-Here you can find some [Screenshots](https://github.com/GRomR1/influxdb-slurm-monitoring/screenshots).
+Here you can find some [Screenshots](https://github.com/GRomR1/influxdb-slurm-monitoring/tree/master/sreenshots).
 
-Please, refer to  [INSTALL.md](https://github.com/asanchez1987/jobcomp-elasticsearch/blob/master/INSTALL.md) for installation instructions.
+Please, refer to  [INSTALL.md](INSTALL.md) for installation instructions.
